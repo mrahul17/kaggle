@@ -8,6 +8,7 @@ from sets import Set
 #from sklearn.cross_validation import train_test_split,cross_val_score
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn import preprocessing
+import xgboost as xg
 #from sklearn.decomposition import PCA
 #from sklearn.cluster import KMeans
 # remove comment from the line below if using ipython notebook
@@ -41,19 +42,28 @@ def clean_data():
 		train[col] = preprocessor.transform(list(train[col].values))
 		test[col] = preprocessor.transform(list(test[col].values))	
 
+def xgb_model():
+	traind = xg.DMatrix(train.iloc[:,2:],train.iloc[:,1])
+	testd = xg.DMatrix(test.iloc[:,1:])
+
+	params = {"objective":"binary:logistic"}
+	gbm = xg.train(params,dtrain,20)
+	y_pred = gbm.predict(dtest)
+	submission = test[['QuoteNumber']]
+	submission['QuoteConversion_Flag'] = y_pred
+	submission.to_csv('output2.csv')
+
+def add_features():
+	pass
 
 
-#def replace(label):
-#	train.replace({label:create_mapping(label)},inplace=True)
-
-
-if __name__ == "__main__":
+def prepare_data():
 	print "Reading Data..."
 	train,test,features = read_data()
 	
-	# list to store columns that have null values
 	print "Cleaning Data..."
 	clean_data()
+
 	print "Filling na values.."
 	train.fillna(-1,inplace=True)
 	test.fillna(-1,inplace=True)
@@ -61,16 +71,12 @@ if __name__ == "__main__":
 	# Deal with Field10
 	print "Converting Field10.."
 	map_field10 = {}
-
 	train_f10_unique = pd.unique(train['Field10'])
 	test_f10_unique = pd.unique(test['Field10'])
-
-
 	for item in train_f10_unique:
 		map_field10[item] = int("".join(item.split(",")))
 	for item in test_f10_unique:
 		map_field10[item] = int("".join(item.split(",")))
-
 	train.replace({'Field10':map_field10},inplace=True)
 	test.replace({'Field10':map_field10},inplace=True)
 
@@ -84,9 +90,20 @@ if __name__ == "__main__":
 	test.drop('Original_Quote_Date',axis=1,inplace=True)
 
 	print "Saving Cleaned Data on disk.."
-	train.to_csv('train_cleaned.csv')
-	test.to_csv('test_cleaned.csv')
+	train.to_csv('train_cleaned.csv',index=False)
+	test.to_csv('test_cleaned.csv',index=False)
 	print "Clean Data ready and saved on disk. Exiting..."
+
+
+
+if __name__ == "__main__":
+	
+	prepare_data()
+	train = pd.read_csv('train_cleaned.csv')
+	test = pd.read_csv('test_cleaned.csv')
+
+	#apply xgboost
+	xgb_model()
 
 
 
