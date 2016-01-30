@@ -43,18 +43,24 @@ def clean_data():
 		test[col] = preprocessor.transform(list(test[col].values))	
 
 def xgb_model():
-	traind = xg.DMatrix(train.iloc[:,2:],train.iloc[:,1])
-	testd = xg.DMatrix(test.iloc[:,1:])
+	print "Applying Model...."
+	traind = xg.DMatrix(train.iloc[:,3:],train.iloc[:,2])
+	testd = xg.DMatrix(test.iloc[:,2:])
 
 	params = {"objective":"binary:logistic"}
-	gbm = xg.train(params,dtrain,20)
-	y_pred = gbm.predict(dtest)
+	gbm = xg.train(params,traind,20)
+	y_pred = gbm.predict(testd)
 	submission = test[['QuoteNumber']]
 	submission['QuoteConversion_Flag'] = y_pred
-	submission.to_csv('output2.csv')
+	print "Saving Output"
+	submission.to_csv('output3.csv',index=False)
 
 def add_features():
-	pass
+	# count number of zeroes
+	print "Adding Features..."
+	cols = [col for col in train.columns if col != "QuoteConversion_Flag"]
+	train["CountZero"]=np.sum(train[cols] == 0 , axis = 1)
+	test["CountZero"]=np.sum(test[cols] == 0 , axis = 1) 
 
 
 def prepare_data():
@@ -98,11 +104,12 @@ def prepare_data():
 
 if __name__ == "__main__":
 	
-	prepare_data()
+	#prepare_data()
 	train = pd.read_csv('train_cleaned.csv')
 	test = pd.read_csv('test_cleaned.csv')
 
 	#apply xgboost
+	add_features()
 	xgb_model()
 
 
