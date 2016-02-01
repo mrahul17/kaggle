@@ -59,8 +59,8 @@ def add_features():
 	# count number of zeroes
 	print "Adding Features..."
 	cols = [col for col in train.columns if col != "QuoteConversion_Flag"]
-	train["CountZero"]=np.sum(train[cols] == 0 , axis = 1)
-	test["CountZero"]=np.sum(test[cols] == 0 , axis = 1) 
+	train["CountNulls"]=np.sum(train[cols] == -1 , axis = 1)
+	test["CountNulls"]=np.sum(test[cols] == -1 , axis = 1) 
 
 
 def prepare_data():
