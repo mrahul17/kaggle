@@ -44,16 +44,18 @@ def clean_data():
 
 def xgb_model():
 	print "Applying Model...."
-	traind = xg.DMatrix(train.iloc[:,3:],train.iloc[:,2])
-	testd = xg.DMatrix(test.iloc[:,2:])
+	#traind = xg.DMatrix(train.iloc[:,3:],train.iloc[:,2])
+	#testd = xg.DMatrix(test.iloc[:,2:])
 
 	params = {"objective":"binary:logistic"}
-	gbm = xg.train(params,traind,20)
-	y_pred = gbm.predict(testd)
+	print "Training"
+	gbm = xg.train(params,xg.DMatrix(train.iloc[:,3:],train.iloc[:,2]),50)
+	print "Predicting"
+	y_pred = gbm.predict(xg.DMatrix(test.iloc[:,2:]))
 	submission = test[['QuoteNumber']]
 	submission['QuoteConversion_Flag'] = y_pred
 	print "Saving Output"
-	submission.to_csv('output3.csv',index=False)
+	submission.to_csv('submissions/output5.csv',index=False)
 
 def add_features():
 	# count number of zeroes
@@ -61,6 +63,15 @@ def add_features():
 	cols = [col for col in train.columns if col != "QuoteConversion_Flag"]
 	train["CountNulls"]=np.sum(train[cols] == -1 , axis = 1)
 	test["CountNulls"]=np.sum(test[cols] == -1 , axis = 1) 
+	for col in train.columns[3:10]:
+		train[col + str(2)] = np.square(train[col])
+
+	for col in test.columns[2:9]:
+		test[col + str(2)] = np.square(test[col])
+
+	train.to_csv('train_with_square_featues.csv',index=False)
+	test.to_csv('test_with_square_featues.csv',index=False)
+
 
 
 def prepare_data():
