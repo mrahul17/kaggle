@@ -8,6 +8,8 @@ from sets import Set
 #from sklearn.cross_validation import train_test_split,cross_val_score
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn import preprocessing
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import f_classif
 import xgboost as xg
 #from sklearn.decomposition import PCA
 #from sklearn.cluster import KMeans
@@ -42,20 +44,46 @@ def clean_data():
 		train[col] = preprocessor.transform(list(train[col].values))
 		test[col] = preprocessor.transform(list(test[col].values))	
 
+	return train,test
+
+def select_features():
+	# select 250 best features
+	selectf = SelectKBest(f_classif	, k=250)
+	selectf.fit(train.iloc[:,2:], train.iloc[:,1])
+	
+	#train_new = (train.iloc[:,2:])[:,selectf.get_support()]
+	#test_new = (test.iloc[:,1:])[:,selectf.get_support()]
+	train_column_list = list(train.columns)
+	univ_col_list = train_column_list[2:]
+	cols = []
+	i = 0
+	mask = selectf.get_support()
+	for col in mask:
+		if col:
+			cols.append(univ_col_list[i])
+		i += 1
+
+	train_new = train[train_column_list[:2]+cols]
+	test_new = test[train_column_list[:1]+cols]
+	
+	return (train_new,test_new)
+	
+
+	
+
 def xgb_model():
-	print "Applying Model...."
 	#traind = xg.DMatrix(train.iloc[:,3:],train.iloc[:,2])
 	#testd = xg.DMatrix(test.iloc[:,2:])
 
 	params = {"objective":"binary:logistic"}
-	print "Training"
-	gbm = xg.train(params,xg.DMatrix(train.iloc[:,3:],train.iloc[:,2]),50)
-	print "Predicting"
-	y_pred = gbm.predict(xg.DMatrix(test.iloc[:,2:]))
+	print "Training the model now... This will take really long"
+	gbm = xg.train(params,xg.DMatrix(train.iloc[:,2:],train.iloc[:,1]),200)
+	print "Predicting..... "
+	y_pred = gbm.predict(xg.DMatrix(test.iloc[:,1:]))
 	submission = test[['QuoteNumber']]
-	submission['QuoteConversion_Flag'] = y_pred
-	print "Saving Output"
-	submission.to_csv('submissions/output5.csv',index=False)
+	submission.loc[:,'QuoteConversion_Flag'] = y_pred
+	print "Saving output...."
+	submission.to_csv('submissions/output11.csv',index=False)
 
 def add_features():
 	# count number of zeroes
@@ -63,20 +91,21 @@ def add_features():
 	cols = [col for col in train.columns if col != "QuoteConversion_Flag"]
 	train["CountNulls"]=np.sum(train[cols] == -1 , axis = 1)
 	test["CountNulls"]=np.sum(test[cols] == -1 , axis = 1) 
-	for col in train.columns[3:10]:
+	for col in train.columns[2:150]:
 		train[col + str(2)] = np.square(train[col])
-
-	for col in test.columns[2:9]:
+		#train[col] = np.square(train[col])
+	for col in test.columns[1:149]:
 		test[col + str(2)] = np.square(test[col])
+		#test[col] = np.square(test[col])
 
-	train.to_csv('train_with_square_featues.csv',index=False)
-	test.to_csv('test_with_square_featues.csv',index=False)
+	#train.to_csv('train_with_edited_featues.csv',index=False)
+	#test.to_csv('test_with_edited_featues.csv',index=False)
 
 
 
 def prepare_data():
 	print "Reading Data..."
-	train,test,features = read_data()
+	read_data()
 	
 	print "Cleaning Data..."
 	clean_data()
@@ -108,7 +137,7 @@ def prepare_data():
 
 	print "Saving Cleaned Data on disk.."
 	train.to_csv('train_cleaned.csv',index=False)
-	test.to_csv('test_cleaned.csv',index=False)
+	test.to_csv('test_cleaned.csv',index=False)	
 	print "Clean Data ready and saved on disk. Exiting..."
 
 
@@ -118,11 +147,13 @@ if __name__ == "__main__":
 	#prepare_data()
 	train = pd.read_csv('train_cleaned.csv')
 	test = pd.read_csv('test_cleaned.csv')
-
+	#prepare_sample()
+	print "Selecting Features..."
+	train,test = select_features()
 	#apply xgboost
 	add_features()
 	xgb_model()
-
+	print "Done!! Exiting Now..."
 
 
 	#X = train.drop('QuoteConversion_Flag')
