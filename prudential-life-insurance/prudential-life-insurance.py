@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sets import Set
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 #from sklearn.neighbors import KNeighborsClassifier
 #from sklearn.linear_model import LogisticRegression
 #from sklearn import metrics
@@ -22,7 +22,7 @@ def eval_wrapper(yhat, y):
     y = np.array(y)
     y = y.astype(int)
     yhat = np.array(yhat)
-    yhat = np.clip(np.round(yhat), np.min(y), np.max(y)).astype(int)   
+    yhat = np.clip(np.round(yhat), 1,8).astype(int)   
     return quadratic_weighted_kappa(yhat, y)
 
 def read_data():
@@ -91,10 +91,10 @@ def xgb_model_local():
 	print "Predicting..... "
 	y_pred = gbm.predict(xg.DMatrix(X_test),ntree_limit=gbm.best_iteration)
 	# thanks @inversion https://www.kaggle.com/inversion/prudential-life-insurance-assessment/digitize/code
-	preds = np.clip(y_pred,0.1,8.1)
-	splits = [0, 1.2, 2.2, 3.3, 4.5, 5.5, 6.4, 7]
-	response = np.digitize(preds, splits)
-	return eval_wrapper(response,y_test)
+	#preds = np.clip(y_pred,0.1,8.1)
+	#splits = [0, 1.2, 2.2, 3.3, 4.5, 5.5, 6.4, 7]
+	#response = np.digitize(preds, splits)
+	return eval_wrapper(y_pred,y_test)
 
 
 
@@ -116,17 +116,17 @@ def xgb_model():
 
 	gbm = xg.train(params,xg.DMatrix(train.iloc[:,1:].drop('Response',axis=1),train.iloc[:,127]),800)
 	print "Predicting..... "
-	y_pred = gbm.predict(xg.DMatrix(test.iloc[:,1:]),ntree_limit=gbm.best_iteration)
+	y_pred = gbm.predict(xg.DMatrix(test.iloc[:,1:],axis=1)),ntree_limit=gbm.best_iteration)
 	# thanks @inversion https://www.kaggle.com/inversion/prudential-life-insurance-assessment/digitize/code
-	preds = np.clip(y_pred,0.1,8.1)
+	preds = np.clip(np.round(y_pred),1,8)
 	splits = [0, 1.2, 2.2, 3.3, 4.5, 5.5, 6.4, 7]
-	response = np.digitize(preds, splits)
+	preds = np.digitize(preds, splits)
 	submission = test[['Id']]
-	submission.loc[:,'Response'] = response
+	submission.loc[:,'Response'] = preds
 	print "Saving output...."
 	# fix to remove floats
 	submission = submission.astype(int)
-	submission.to_csv('submissions/output5.csv',index=False)
+	submission.to_csv('submissions/output6.csv',index=False)
 
 def add_features():
 	# count number of zeroes
@@ -151,7 +151,6 @@ def prepare_data():
 	
 	print "Reading Original Train and Test Data..."
 	train,test,features = read_data()
-	
 	print "Cleaning Data..."
 	train,test = clean_data(train,test)
 	# because labels need to start from 0
@@ -167,8 +166,16 @@ def prepare_data():
 	print "Clean Data ready and saved on disk. Exiting..."
 
 
-def get_score_local():
-	pass
+def plot_scatter():
+	'''
+		Function to save scatter plots 
+	'''
+	print "plotting correlation plots.."
+	for col in train.iloc[:,1:].columns:
+		plt.figure()
+		train.plot(kind='hexbin',x=col,y='Response',gridsize=10)
+		plt.savefig("histograms/"+col+'.png')
+		plt.close()
 	
 
 if __name__ == "__main__":
@@ -182,39 +189,17 @@ if __name__ == "__main__":
 	test = pd.read_csv('test_cleaned.csv')
 	add_features()
 	# COMMENT THE LINE BELOW
-	X_train,X_test,y_train,y_test = train_test_split(train.iloc[:,1:].drop('Response',axis=1),train.iloc[:,127],test_size=0.4, random_state=0)
-	print xgb_model_local()
+	#X_train,X_test,y_train,y_test = train_test_split(train.iloc[:,1:].drop(['Response','Medical_History_10','Medical_History_24'],axis=1),train.iloc[:,127],test_size=0.4, random_state=0)
+	#X_train = X_test = train.iloc[:,1:].drop(['Response','Medical_History_10','Medical_History_24'],axis=1)
+	#_train = y_test = train.iloc[:,127]
+	#print xgb_model_local()
 
 	#prepare_sample()
 	#print "Selecting Features..."
 	#train,test = select_features()
 	#apply xgboost
+	xgb_model()
+	#plot_scatter()
 	
-#	xgb_model()
 	print "Done!! Exiting Now..."
 
-
-	#X = train.drop('QuoteConversion_Flag')
-	#y = train.QuoteConversion_Flag
-
-	#classifier = GradientBoostingClassifier(random_state=0)
-
-	# Field10 and Original_Quote_Date need special mention
-
-
-
-#		mappings_universal[col] = create_mapping(col)
-#		train.replace({col:mappings_universal[col]},inplace=True)
-
-#	test_obj_cols = obj_cols
-
-#	for col in test_obj_cols:
-#		test.replace({col:mappings_universal[col]},inplace=True)
-
-	# after this the values which were not in 
-
-	
-
-	#delete useless
-
-#	train.replace({'PropertyField4':create_mapping('PropertyField4')},inplace=True)
