@@ -5,6 +5,7 @@ from sets import Set
 #from sklearn.neighbors import KNeighborsClassifier
 #from sklearn.linear_model import LogisticRegression
 #from sklearn import metrics
+from ml_metrics import quadratic_weighted_kappa
 from sklearn.cross_validation import train_test_split,cross_val_score
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn import preprocessing
@@ -15,6 +16,14 @@ import xgboost as xg
 #from sklearn.cluster import KMeans
 # remove comment from the line below if using ipython notebook
 #%matplotlib inline
+
+# credits to @zeroblue
+def eval_wrapper(yhat, y):  
+    y = np.array(y)
+    y = y.astype(int)
+    yhat = np.array(yhat)
+    yhat = np.clip(np.round(yhat), np.min(y), np.max(y)).astype(int)   
+    return quadratic_weighted_kappa(yhat, y)
 
 def read_data():
 	train = pd.read_csv('train.csv')
@@ -60,14 +69,14 @@ def select_features():
 	return (train_new,test_new)
 	
 
-	
-
-def xgb_model():
-
+def xgb_model_local():
+	'''
+		Function to apply the xgb model to the split train dataset to get the score
+	'''
 	# setup parameters for xgboost
 	params = {}
 	# use softmax multi-class classification
-	params['objective'] = 'multi:softmax'
+	params['objective'] = 'reg:linear'
 	# scale weight of positive examples
 	params["eta"] = 0.05
 	params["min_child_weight"] = 240
@@ -75,18 +84,49 @@ def xgb_model():
 	params["colsample_bytree"] = 0.67
 	params["silent"] = 1
 	params["max_depth"] = 6
-	params['num_class'] = 8
+	#params['num_class'] = 8
+	print "Training the model now... This will take really long..."
+
+	gbm = xg.train(params,xg.DMatrix(X_train,y_train),800)
+	print "Predicting..... "
+	y_pred = gbm.predict(xg.DMatrix(X_test),ntree_limit=gbm.best_iteration)
+	# thanks @inversion https://www.kaggle.com/inversion/prudential-life-insurance-assessment/digitize/code
+	preds = np.clip(y_pred,0.1,8.1)
+	splits = [0, 1.2, 2.2, 3.3, 4.5, 5.5, 6.4, 7]
+	response = np.digitize(preds, splits)
+	return eval_wrapper(response,y_test)
+
+
+
+def xgb_model():
+
+	# setup parameters for xgboost
+	params = {}
+	# use softmax multi-class classification
+	params['objective'] = 'reg:linear'
+	# scale weight of positive examples
+	params["eta"] = 0.05
+	params["min_child_weight"] = 240
+	params["subsample"] = 0.9
+	params["colsample_bytree"] = 0.67
+	params["silent"] = 1
+	params["max_depth"] = 6
+	#params['num_class'] = 8
 	print "Training the model now... This will take really long..."
 
 	gbm = xg.train(params,xg.DMatrix(train.iloc[:,1:].drop('Response',axis=1),train.iloc[:,127]),800)
 	print "Predicting..... "
-	y_pred = gbm.predict(xg.DMatrix(test.iloc[:,1:]))
+	y_pred = gbm.predict(xg.DMatrix(test.iloc[:,1:]),ntree_limit=gbm.best_iteration)
+	# thanks @inversion https://www.kaggle.com/inversion/prudential-life-insurance-assessment/digitize/code
+	preds = np.clip(y_pred,0.1,8.1)
+	splits = [0, 1.2, 2.2, 3.3, 4.5, 5.5, 6.4, 7]
+	response = np.digitize(preds, splits)
 	submission = test[['Id']]
-	submission.loc[:,'Response'] = y_pred + 1
+	submission.loc[:,'Response'] = response
 	print "Saving output...."
 	# fix to remove floats
 	submission = submission.astype(int)
-	submission.to_csv('submissions/output3.csv',index=False)
+	submission.to_csv('submissions/output5.csv',index=False)
 
 def add_features():
 	# count number of zeroes
@@ -115,7 +155,7 @@ def prepare_data():
 	print "Cleaning Data..."
 	train,test = clean_data(train,test)
 	# because labels need to start from 0
-	train.loc[:,'Response'] = train.loc[:,'Response'] - 1 
+	#train.loc[:,'Response'] = train.loc[:,'Response'] - 1 
 	print "Filling na values.."
 	train.fillna(-1,inplace=True)
 	test.fillna(-1,inplace=True)
@@ -127,6 +167,9 @@ def prepare_data():
 	print "Clean Data ready and saved on disk. Exiting..."
 
 
+def get_score_local():
+	pass
+	
 
 if __name__ == "__main__":
 	# COMMENT THE  LINES BELOW AFTER THE PROGRAM HAS BEEN RUN ONCE
@@ -135,16 +178,19 @@ if __name__ == "__main__":
 	# THE LINES BELOW WILL BE COMMENTED WHEN THE ABOVE IS USED
 	print "Reading Train Data..."
 	train = pd.read_csv('train_cleaned.csv')
-	#X_train,X_test,y_train,y_test = train_test_split(train.iloc[:,1:127],train.iloc[:,127],test_size=0.4, random_state=0)	
-
 	print "Reading Test Data..."
 	test = pd.read_csv('test_cleaned.csv')
+	add_features()
+	# COMMENT THE LINE BELOW
+	X_train,X_test,y_train,y_test = train_test_split(train.iloc[:,1:].drop('Response',axis=1),train.iloc[:,127],test_size=0.4, random_state=0)
+	print xgb_model_local()
+
 	#prepare_sample()
 	#print "Selecting Features..."
 	#train,test = select_features()
 	#apply xgboost
-	add_features()
-	xgb_model()
+	
+#	xgb_model()
 	print "Done!! Exiting Now..."
 
 
