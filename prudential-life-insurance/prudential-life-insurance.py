@@ -10,7 +10,8 @@ from sklearn.cross_validation import train_test_split,cross_val_score
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn import preprocessing
 from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection import f_classif
+from sklearn.feature_selection import f_regression
+from scipy.optimize import fmin_powell
 import xgboost as xg
 #from sklearn.decomposition import PCA
 #from sklearn.cluster import KMeans
@@ -22,60 +23,23 @@ def eval_wrapper(yhat, y):
     y = np.array(y)
     y = y.astype(int)
     yhat = np.array(yhat)
-    yhat = np.clip(np.round(yhat), 1,8).astype(int)   
+    yhat = np.clip(np.round(yhat), np.min(y), np.max(y)).astype(int)      
     return quadratic_weighted_kappa(yhat, y)
 
-def read_data():
-	train = pd.read_csv('train.csv')
-	test = pd.read_csv('test.csv')
-	features = train.columns.tolist()
-	return (train,test,features)
+def apply_offset(data, bin_offset, sv, scorer=eval_wrapper):
+    # data has the format of pred=0, offset_pred=1, labels=2 in the first dim
+    data[1, data[0].astype(int)==sv] = data[0, data[0].astype(int)==sv] + bin_offset
+    score = scorer(data[1], data[2])
+    return score
 
-
-def clean_data(train,test):
-	obj_cols = [] #list to store columns that have been read as objects
-	for col in train.columns:
-		if train[col].dtype==object:
-			obj_cols.append(col)
-	preprocessor = preprocessing.LabelEncoder()	
-	
-	for col in obj_cols:
-		preprocessor.fit(list(train[col].values) + list(test[col].values))
-		train[col] = preprocessor.transform(list(train[col].values))
-		test[col] = preprocessor.transform(list(test[col].values))	
-
-	return train,test
-
-def select_features():
-	# select 250 best features
-	selectf = SelectKBest(f_classif	, k=250)
-	selectf.fit(train.iloc[:,2:], train.iloc[:,1])
-	
-	#train_new = (train.iloc[:,2:])[:,selectf.get_support()]
-	#test_new = (test.iloc[:,1:])[:,selectf.get_support()]
-	train_column_list = list(train.columns)
-	univ_col_list = train_column_list[2:]
-	cols = []
-	i = 0
-	mask = selectf.get_support()
-	for col in mask:
-		if col:
-			cols.append(univ_col_list[i])
-		i += 1
-
-	train_new = train[train_column_list[:2]+cols]
-	test_new = test[train_column_list[:1]+cols]
-	
-	return (train_new,test_new)
-	
-
-def xgb_model_local():
+def xgb_model():
 	'''
 		Function to apply the xgb model to the split train dataset to get the score
 	'''
 	# setup parameters for xgboost
 	params = {}
 	# use softmax multi-class classification
+	#params['objective'] = 'multi:softmax'
 	params['objective'] = 'reg:linear'
 	# scale weight of positive examples
 	params["eta"] = 0.05
@@ -88,82 +52,83 @@ def xgb_model_local():
 	print "Training the model now... This will take really long..."
 
 	gbm = xg.train(params,xg.DMatrix(X_train,y_train),800)
-	print "Predicting..... "
-	y_pred = gbm.predict(xg.DMatrix(X_test),ntree_limit=gbm.best_iteration)
+	print "Predicting on train data..."
+	train_preds = gbm.predict(xg.DMatrix(X_train),ntree_limit=gbm.best_iteration)
+
+	print "Predicting on test data..."
+	test_preds = gbm.predict(xg.DMatrix(X_test),ntree_limit=gbm.best_iteration)
+	
+
+	train_preds = np.clip(train_preds, -0.99, 8.99)
+	test_preds = np.clip(test_preds, -0.99, 8.99)
+	num_classes = 8
+	# train offsets 
+	offsets = np.array([0.1, -1, -2, -1, -0.8, 0.02, 0.8, 1])
+	data = np.vstack((train_preds, train_preds, train['Response'].values))
+	for j in range(num_classes):	
+		data[1, data[0].astype(int)==j] = data[0, data[0].astype(int)==j] + offsets[j] 
+	for j in range(num_classes):
+		train_offset = lambda x: -apply_offset(data, x, j)
+		offsets[j] = fmin_powell(train_offset, offsets[j])  
+
+	# apply offsets to test
+	#return test_preds.shape,test['Response'].values
+	
+	data = np.vstack((test_preds, test_preds, test['Response'].values))
+	for j in range(num_classes):
+		data[1, data[0].astype(int)==j] = data[0, data[0].astype(int)==j] + offsets[j] 
+
+	final_test_preds = np.round(np.clip(data[1], 1, 8)).astype(int)
+
 	# thanks @inversion https://www.kaggle.com/inversion/prudential-life-insurance-assessment/digitize/code
 	#preds = np.clip(y_pred,0.1,8.1)
-	#splits = [0, 1.2, 2.2, 3.3, 4.5, 5.5, 6.4, 7]
-	#response = np.digitize(preds, splits)
-	return eval_wrapper(y_pred,y_test)
-
-
-
-def xgb_model():
-
-	# setup parameters for xgboost
-	params = {}
-	# use softmax multi-class classification
-	params['objective'] = 'reg:linear'
-	# scale weight of positive examples
-	params["eta"] = 0.05
-	params["min_child_weight"] = 240
-	params["subsample"] = 0.9
-	params["colsample_bytree"] = 0.67
-	params["silent"] = 1
-	params["max_depth"] = 6
-	#params['num_class'] = 8
-	print "Training the model now... This will take really long..."
-
-	gbm = xg.train(params,xg.DMatrix(train.iloc[:,1:].drop('Response',axis=1),train.iloc[:,127]),800)
-	print "Predicting..... "
-	y_pred = gbm.predict(xg.DMatrix(test.iloc[:,1:],axis=1)),ntree_limit=gbm.best_iteration)
-	# thanks @inversion https://www.kaggle.com/inversion/prudential-life-insurance-assessment/digitize/code
-	preds = np.clip(np.round(y_pred),1,8)
-	splits = [0, 1.2, 2.2, 3.3, 4.5, 5.5, 6.4, 7]
-	preds = np.digitize(preds, splits)
+	#splits = [0, 1.5, 2.5, 3, 4.2, 5.8, 6.5, 7]
+	#y_pred = np.digitize(preds, splits)
+	print eval_wrapper(train_preds,y_train)
 	submission = test[['Id']]
-	submission.loc[:,'Response'] = preds
+	submission.loc[:,'Response'] = final_test_preds
 	print "Saving output...."
 	# fix to remove floats
 	submission = submission.astype(int)
-	submission.to_csv('submissions/output6.csv',index=False)
+	submission.to_csv('submissions/output10.csv',index=False)
+
 
 def add_features():
 	# count number of zeroes
 	print "Adding Features..."
-	#cols = [col for col in train.columns if col != "Response"]
-	#train["CountNulls"]=np.sum(train[cols] == -1 , axis = 1)
-	#test["CountNulls"]=np.sum(test[cols] == -1 , axis = 1) 
-	med_keyword_columns = [col for col in train.columns if col.startswith('Medical_Keyword_')]
-	train['Med_Keywords_Count'] = train[med_keyword_columns].sum(axis=1)
-	train['BMI_Age'] = train['BMI'] * train['Ins_Age']
-	test['Med_Keywords_Count'] = test[med_keyword_columns].sum(axis=1)
-	test['BMI_Age'] = test['BMI'] * test['Ins_Age']
-
-	#test[col] = np.square(test[col])
-
-	#train.to_csv('train_with_edited_featues.csv',index=False)
-	#test.to_csv('test_with_edited_featues.csv',index=False)
-
-
-
-def prepare_data():
+	all_data = train.append(test)
 	
-	print "Reading Original Train and Test Data..."
-	train,test,features = read_data()
-	print "Cleaning Data..."
-	train,test = clean_data(train,test)
-	# because labels need to start from 0
-	#train.loc[:,'Response'] = train.loc[:,'Response'] - 1 
-	print "Filling na values.."
-	train.fillna(-1,inplace=True)
-	test.fillna(-1,inplace=True)
+	# @credits zeroblue
+	# Found at https://www.kaggle.com/marcellonegro/prudential-life-insurance-assessment/xgb-offset0501/run/137585/code
+	# create any new variables    
+	all_data['Product_Info_2_char'] = all_data.Product_Info_2.str[0]
+	all_data['Product_Info_2_num'] = all_data.Product_Info_2.str[1]
 
+	# factorize categorical variables
+	all_data['Product_Info_2'] = pd.factorize(all_data['Product_Info_2'])[0]
+	all_data['Product_Info_2_char'] = pd.factorize(all_data['Product_Info_2_char'])[0]
+	all_data['Product_Info_2_num'] = pd.factorize(all_data['Product_Info_2_num'])[0]
 
-	print "Saving Cleaned Data on disk.."
-	train.to_csv('train_cleaned.csv',index=False)
-	test.to_csv('test_cleaned.csv',index=False)	
-	print "Clean Data ready and saved on disk. Exiting..."
+	all_data['BMI_Age'] = all_data['BMI'] * all_data['Ins_Age']
+
+	med_keyword_columns = all_data.columns[all_data.columns.str.startswith('Medical_Keyword_')]
+	all_data['Med_Keywords_Count'] = all_data[med_keyword_columns].sum(axis=1)
+
+	# inspired by https://www.kaggle.com/mariopasquato/prudential-life-insurance-assessment/linear-model/code
+	all_data['BMI_Prod4'] = all_data['BMI'] * all_data['Product_Info_4']
+	all_data['BMI_Med_Key3'] = all_data['BMI'] * all_data['Medical_Keyword_3']
+
+	print 'Filling Missing values'
+	all_data.fillna(-1, inplace=True)
+
+	all_data['Response'] = all_data['Response'].astype(int)
+	train_new = all_data[all_data['Response']>0].copy()
+	test_new = all_data[all_data['Response']<1].copy()
+
+	train_new.to_csv('train_prepared.csv',index=False)
+	test_new.to_csv('test_prepared.csv',index=False)
+	
+	return train_new,test_new
 
 
 def plot_scatter():
@@ -184,21 +149,33 @@ if __name__ == "__main__":
 
 	# THE LINES BELOW WILL BE COMMENTED WHEN THE ABOVE IS USED
 	print "Reading Train Data..."
-	train = pd.read_csv('train_cleaned.csv')
+	train = pd.read_csv('train.csv')
 	print "Reading Test Data..."
-	test = pd.read_csv('test_cleaned.csv')
-	add_features()
+	test = pd.read_csv('test.csv')
+	train,test = add_features()
+
 	# COMMENT THE LINE BELOW
-	#X_train,X_test,y_train,y_test = train_test_split(train.iloc[:,1:].drop(['Response','Medical_History_10','Medical_History_24'],axis=1),train.iloc[:,127],test_size=0.4, random_state=0)
-	#X_train = X_test = train.iloc[:,1:].drop(['Response','Medical_History_10','Medical_History_24'],axis=1)
-	#_train = y_test = train.iloc[:,127]
-	#print xgb_model_local()
+	columns_to_drop = ['Response','Medical_History_10','Medical_History_24']
+	#X_train,X_test,y_train,y_test = train_test_split(train.iloc[:,1:].drop((['Response']+columns_to_drop),axis=1),train['Response'],test_size=0.3, random_state=0)
+	
+	#train,test = select_features()
+	X_train =  train.iloc[:,1:].drop(columns_to_drop,axis=1)
+	X_test = test.iloc[:,1:].drop(columns_to_drop,axis=1)
+	y_train = y_test = train['Response']
+	
+	xgb_model()
 
 	#prepare_sample()
 	#print "Selecting Features..."
-	#train,test = select_features()
+	
 	#apply xgboost
-	xgb_model()
+	#print "Predicting on test data"
+	#X_train = train.iloc[:,1:].drop(columns_to_drop,axis=1)
+	#y_train = train['Response']
+	#X_test = test.iloc[:,1:].drop(columns_to_drop,axis=1)
+	#xgb_model()
+	
+	#Save scatterplot images
 	#plot_scatter()
 	
 	print "Done!! Exiting Now..."
