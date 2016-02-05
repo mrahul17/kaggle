@@ -12,6 +12,7 @@ from sklearn import preprocessing
 from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import f_regression
 from scipy.optimize import fmin_powell
+from sklearn.cross_validation import KFold 
 import xgboost as xg
 #from sklearn.decomposition import PCA
 #from sklearn.cluster import KMeans
@@ -32,7 +33,7 @@ def apply_offset(data, bin_offset, sv, scorer=eval_wrapper):
     score = scorer(data[1], data[2])
     return score
 
-def xgb_model():
+def xgb_model(X_train,y_train,X_test,y_test,save=False):
 	'''
 		Function to apply the xgb model to the split train dataset to get the score
 	'''
@@ -64,7 +65,7 @@ def xgb_model():
 	num_classes = 8
 	# train offsets 
 	offsets = np.array([0.1, -1, -2, -1, -0.8, 0.02, 0.8, 1])
-	data = np.vstack((train_preds, train_preds, train['Response'].values))
+	data = np.vstack((train_preds, train_preds, y_train.values))
 	for j in range(num_classes):	
 		data[1, data[0].astype(int)==j] = data[0, data[0].astype(int)==j] + offsets[j] 
 	for j in range(num_classes):
@@ -74,7 +75,7 @@ def xgb_model():
 	# apply offsets to test
 	#return test_preds.shape,test['Response'].values
 	
-	data = np.vstack((test_preds, test_preds, test['Response'].values))
+	data = np.vstack((test_preds, test_preds, y_test.values))
 	for j in range(num_classes):
 		data[1, data[0].astype(int)==j] = data[0, data[0].astype(int)==j] + offsets[j] 
 
@@ -84,13 +85,15 @@ def xgb_model():
 	#preds = np.clip(y_pred,0.1,8.1)
 	#splits = [0, 1.5, 2.5, 3, 4.2, 5.8, 6.5, 7]
 	#y_pred = np.digitize(preds, splits)
-	print eval_wrapper(train_preds,y_train)
-	submission = test[['Id']]
-	submission.loc[:,'Response'] = final_test_preds
-	print "Saving output...."
-	# fix to remove floats
-	submission = submission.astype(int)
-	submission.to_csv('submissions/output10.csv',index=False)
+	if not save:
+		return eval_wrapper(final_test_preds,y_test)
+	else:
+		submission = X_test[['Id']]
+		submission.loc[:,'Response'] = final_test_preds
+		print "Saving output...."
+		# fix to remove floats
+		submission = submission.astype(int)
+		submission.to_csv('submissions/output11.csv',index=False)
 
 
 def add_features():
@@ -118,6 +121,9 @@ def add_features():
 	all_data['BMI_Prod4'] = all_data['BMI'] * all_data['Product_Info_4']
 	all_data['BMI_Med_Key3'] = all_data['BMI'] * all_data['Medical_Keyword_3']
 
+
+	#
+	#all_data['Age_Med_Keywords_Count']  = all_data['Med_Keywords_Count'] * all_data['Ins_Age']
 	print 'Filling Missing values'
 	all_data.fillna(-1, inplace=True)
 
@@ -156,24 +162,34 @@ if __name__ == "__main__":
 
 	# COMMENT THE LINE BELOW
 	columns_to_drop = ['Response','Medical_History_10','Medical_History_24']
-	#X_train,X_test,y_train,y_test = train_test_split(train.iloc[:,1:].drop((['Response']+columns_to_drop),axis=1),train['Response'],test_size=0.3, random_state=0)
 	
 	#train,test = select_features()
-	X_train =  train.iloc[:,1:].drop(columns_to_drop,axis=1)
-	X_test = test.iloc[:,1:].drop(columns_to_drop,axis=1)
-	y_train = y_test = train['Response']
-	
-	xgb_model()
+	skf = KFold(len(train),n_folds=3)
+	print "Begin 3 fold cross validation"
+	for train_index,test_index in skf:
+		train_part = train.iloc[train_index,:]
+		test_part = train.iloc[test_index,:]
+		X_train =  train_part.iloc[:,1:].drop(columns_to_drop,axis=1)
+		X_test = test_part.iloc[:,1:].drop(columns_to_drop,axis=1)
+		y_train = train_part['Response']
+		y_test = test_part['Response']
+		print xgb_model(X_train,y_train,X_test,y_test)
+
+	proceed = raw_input("Train on entire Data? (T/F)")
+	if proceed == 'T':
+		X_train =  train.iloc[:,1:].drop(columns_to_drop,axis=1)
+		X_test = test.iloc[:,1:].drop(columns_to_drop,axis=1)
+		y_train = y_test = train['Response']
+		
+		xgb_model(X_train,y_train,X_test,y_test,True)
 
 	#prepare_sample()
 	#print "Selecting Features..."
 	
 	#apply xgboost
 	#print "Predicting on test data"
-	#X_train = train.iloc[:,1:].drop(columns_to_drop,axis=1)
-	#y_train = train['Response']
-	#X_test = test.iloc[:,1:].drop(columns_to_drop,axis=1)
-	#xgb_model()
+	
+	
 	
 	#Save scatterplot images
 	#plot_scatter()
