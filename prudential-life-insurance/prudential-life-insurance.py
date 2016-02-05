@@ -116,23 +116,35 @@ def add_features():
 
 	med_keyword_columns = all_data.columns[all_data.columns.str.startswith('Medical_Keyword_')]
 	all_data['Med_Keywords_Count'] = all_data[med_keyword_columns].sum(axis=1)
-
+	
 	# inspired by https://www.kaggle.com/mariopasquato/prudential-life-insurance-assessment/linear-model/code
 	all_data['BMI_Prod4'] = all_data['BMI'] * all_data['Product_Info_4']
 	all_data['BMI_Med_Key3'] = all_data['BMI'] * all_data['Medical_Keyword_3']
 
 
-	#
 	#all_data['Age_Med_Keywords_Count']  = all_data['Med_Keywords_Count'] * all_data['Ins_Age']
 	print 'Filling Missing values'
 	all_data.fillna(-1, inplace=True)
 
+
 	all_data['Response'] = all_data['Response'].astype(int)
+	cols = [col for col in train.columns if col != "Response"]
+	all_data["CountNulls"]=np.sum(all_data[cols] == -1 , axis = 1)
+	
+	insured_info_columns = all_data.columns[all_data.columns.str.startswith('Insured_Info_')]
+	all_data['UA_Insured_Info'] = np.sum(all_data[insured_info_columns] == -1 , axis = 1)
+	medical_history_columns = all_data.columns[all_data.columns.str.startswith('Medical_History_')]
+	all_data['UA_Medical_History'] = np.sum(all_data[medical_history_columns] == -1 , axis = 1)
+	family_hist_columns = all_data.columns[all_data.columns.str.startswith('Family_Hist_')]
+	all_data['UA_Family_Hist'] = np.sum(all_data[family_hist_columns] == -1 , axis = 1)
+	employment_info_columns = all_data.columns[all_data.columns.str.startswith('Employment_Info_')]
+	all_data['UA_Employment_Info'] = np.sum(all_data[employment_info_columns] == -1 , axis = 1)
+
 	train_new = all_data[all_data['Response']>0].copy()
 	test_new = all_data[all_data['Response']<1].copy()
 
-	train_new.to_csv('train_prepared.csv',index=False)
-	test_new.to_csv('test_prepared.csv',index=False)
+	#train_new.to_csv('train_prepared.csv',index=False)
+	#test_new.to_csv('test_prepared.csv',index=False)
 	
 	return train_new,test_new
 
@@ -164,22 +176,23 @@ if __name__ == "__main__":
 	columns_to_drop = ['Response','Medical_History_10','Medical_History_24']
 	
 	#train,test = select_features()
-	skf = KFold(len(train),n_folds=3)
-	print "Begin 3 fold cross validation"
-	for train_index,test_index in skf:
-		train_part = train.iloc[train_index,:]
-		test_part = train.iloc[test_index,:]
-		X_train =  train_part.iloc[:,1:].drop(columns_to_drop,axis=1)
-		X_test = test_part.iloc[:,1:].drop(columns_to_drop,axis=1)
-		y_train = train_part['Response']
-		y_test = test_part['Response']
-		print xgb_model(X_train,y_train,X_test,y_test)
+	#skf = KFold(len(train),n_folds=3)
+	#print "Begin 3 fold cross validation"
+	#for train_index,test_index in skf:
+	#	train_part = train.iloc[train_index,:]
+	#	test_part = train.iloc[test_index,:]
+	#	X_train =  train_part.iloc[:,1:].drop(columns_to_drop,axis=1)
+	#	X_test = test_part.iloc[:,1:].drop(columns_to_drop,axis=1)
+	#	y_train = train_part['Response']
+	#	y_test = test_part['Response']
+	#	print xgb_model(X_train,y_train,X_test,y_test)
 
 	proceed = raw_input("Train on entire Data? (T/F)")
 	if proceed == 'T':
 		X_train =  train.iloc[:,1:].drop(columns_to_drop,axis=1)
 		X_test = test.iloc[:,1:].drop(columns_to_drop,axis=1)
-		y_train = y_test = train['Response']
+		y_train = train['Response'] 
+		y_test = test['Response']
 		
 		xgb_model(X_train,y_train,X_test,y_test,True)
 
