@@ -131,8 +131,8 @@ def add_features():
 	cols = [col for col in train.columns if col != "Response"]
 	all_data["CountNulls"]=np.sum(all_data[cols] == -1 , axis = 1)
 	
-	insured_info_columns = all_data.columns[all_data.columns.str.startswith('Insured_Info_')]
-	all_data['UA_Insured_Info'] = np.sum(all_data[insured_info_columns] == -1 , axis = 1)
+	insured_info_columns = all_data.columns[all_data.columns.str.startswith('InsuredInfo_')]
+	all_data['UA_InsuredInfo'] = np.sum(all_data[insured_info_columns] == -1 , axis = 1)
 	medical_history_columns = all_data.columns[all_data.columns.str.startswith('Medical_History_')]
 	all_data['UA_Medical_History'] = np.sum(all_data[medical_history_columns] == -1 , axis = 1)
 	family_hist_columns = all_data.columns[all_data.columns.str.startswith('Family_Hist_')]
