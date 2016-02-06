@@ -14,12 +14,35 @@ from sklearn.feature_selection import f_regression
 from scipy.optimize import fmin_powell
 from sklearn.cross_validation import KFold 
 import xgboost as xg
+import operator
 #from sklearn.decomposition import PCA
 #from sklearn.cluster import KMeans
 # remove comment from the line below if using ipython notebook
 #%matplotlib inline
 
 # credits to @zeroblue
+
+def ceate_feature_map(features):
+    outfile = open('xgb.fmap', 'w')
+    i = 0
+    for feat in features:
+        outfile.write('{0}\t{1}\tq\n'.format(i, feat))
+        i = i + 1
+    outfile.close()
+
+def draw_feature_map(gbm):
+	print "Feature importances"
+	importance = gbm.get_fscore(fmap='xgb.fmap')
+	importance = sorted(importance.items(), key=operator.itemgetter(1))
+	df = pd.DataFrame(importance, columns=['feature', 'fscore'])
+	df['fscore'] = df['fscore'] / df['fscore'].sum()
+	plt.figure()
+	df.plot()
+	df.plot(kind='barh', x='feature', y='fscore', legend=False, figsize=(20, 20))
+	plt.title('XGBoost Feature Importance')
+	plt.xlabel('relative importance')
+	plt.gcf().savefig('feature_importance_xgb.png')
+
 def eval_wrapper(yhat, y):  
     y = np.array(y)
     y = y.astype(int)
@@ -51,8 +74,10 @@ def xgb_model(X_train,y_train,X_test,y_test,save=False):
 	params["max_depth"] = 6
 	#params['num_class'] = 8
 	print "Training the model now... This will take really long..."
-
 	gbm = xg.train(params,xg.DMatrix(X_train,y_train),800)
+
+#	draw_feature_map(gbm)
+
 	print "Predicting on train data..."
 	train_preds = gbm.predict(xg.DMatrix(X_train),ntree_limit=gbm.best_iteration)
 
@@ -93,7 +118,7 @@ def xgb_model(X_train,y_train,X_test,y_test,save=False):
 		print "Saving output...."
 		# fix to remove floats
 		submission = submission.astype(int)
-		submission.to_csv('submissions/output11.csv',index=False)
+		submission.to_csv('submissions/output12.csv',index=False)
 
 
 def add_features():
@@ -128,7 +153,7 @@ def add_features():
 
 
 	all_data['Response'] = all_data['Response'].astype(int)
-	cols = [col for col in train.columns if col != "Response"]
+	cols = [col for col in train.columns if col != "Response" and col != "Id"]
 	all_data["CountNulls"]=np.sum(all_data[cols] == -1 , axis = 1)
 	
 	insured_info_columns = all_data.columns[all_data.columns.str.startswith('InsuredInfo_')]
@@ -139,7 +164,8 @@ def add_features():
 	all_data['UA_Family_Hist'] = np.sum(all_data[family_hist_columns] == -1 , axis = 1)
 	employment_info_columns = all_data.columns[all_data.columns.str.startswith('Employment_Info_')]
 	all_data['UA_Employment_Info'] = np.sum(all_data[employment_info_columns] == -1 , axis = 1)
-
+	for col in cols:
+		all_data[col+"square"] = np.square(all_data[col])
 	train_new = all_data[all_data['Response']>0].copy()
 	test_new = all_data[all_data['Response']<1].copy()
 
@@ -174,18 +200,19 @@ if __name__ == "__main__":
 
 	# COMMENT THE LINE BELOW
 	columns_to_drop = ['Response','Medical_History_10','Medical_History_24']
-	
+	features = list(Set(train.columns)-Set(columns_to_drop))
+	ceate_feature_map(features)
 	#train,test = select_features()
-	#skf = KFold(len(train),n_folds=3)
-	#print "Begin 3 fold cross validation"
-	#for train_index,test_index in skf:
-	#	train_part = train.iloc[train_index,:]
-	#	test_part = train.iloc[test_index,:]
-	#	X_train =  train_part.iloc[:,1:].drop(columns_to_drop,axis=1)
-	#	X_test = test_part.iloc[:,1:].drop(columns_to_drop,axis=1)
-	#	y_train = train_part['Response']
-	#	y_test = test_part['Response']
-	#	print xgb_model(X_train,y_train,X_test,y_test)
+	skf = KFold(len(train),n_folds=3)
+	print "Begin 3 fold cross validation"
+	for train_index,test_index in skf:
+		train_part = train.iloc[train_index,:]
+		test_part = train.iloc[test_index,:]
+		X_train =  train_part.iloc[:,1:].drop(columns_to_drop,axis=1)
+		X_test = test_part.iloc[:,1:].drop(columns_to_drop,axis=1)
+		y_train = train_part['Response']
+		y_test = test_part['Response']
+		print xgb_model(X_train,y_train,X_test,y_test)
 
 	proceed = raw_input("Train on entire Data? (T/F)")
 	if proceed == 'T':
