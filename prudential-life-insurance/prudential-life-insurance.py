@@ -60,6 +60,7 @@ def xgb_model(X_train,y_train,X_test,y_test,save=False):
 	'''
 		Function to apply the xgb model to the split train dataset to get the score
 	'''
+	num_rounds = 800
 	# setup parameters for xgboost
 	params = {}
 	# use softmax multi-class classification
@@ -74,7 +75,7 @@ def xgb_model(X_train,y_train,X_test,y_test,save=False):
 	params["max_depth"] = 6
 	#params['num_class'] = 8
 	print "Training the model now... This will take really long..."
-	gbm = xg.train(params,xg.DMatrix(X_train,y_train),800)
+	gbm = xg.train(params,xg.DMatrix(X_train,y_train),num_rounds)
 
 #	draw_feature_map(gbm)
 
@@ -118,7 +119,7 @@ def xgb_model(X_train,y_train,X_test,y_test,save=False):
 		print "Saving output...."
 		# fix to remove floats
 		submission = submission.astype(int)
-		submission.to_csv('submissions/output12.csv',index=False)
+		submission.to_csv('submissions/output13.csv',index=False)
 
 
 def add_features():
@@ -157,14 +158,16 @@ def add_features():
 	all_data["CountNulls"]=np.sum(all_data[cols] == -1 , axis = 1)
 	
 	insured_info_columns = all_data.columns[all_data.columns.str.startswith('InsuredInfo_')]
-	all_data['UA_InsuredInfo'] = np.sum(all_data[insured_info_columns] == -1 , axis = 1)
+	all_data['UA_InsuredInfo'] = np.sum(all_data[insured_info_columns] != -1 , axis = 1)
 	medical_history_columns = all_data.columns[all_data.columns.str.startswith('Medical_History_')]
-	all_data['UA_Medical_History'] = np.sum(all_data[medical_history_columns] == -1 , axis = 1)
+	all_data['UA_Medical_History'] = np.sum(all_data[medical_history_columns] != -1 , axis = 1)
 	family_hist_columns = all_data.columns[all_data.columns.str.startswith('Family_Hist_')]
-	all_data['UA_Family_Hist'] = np.sum(all_data[family_hist_columns] == -1 , axis = 1)
+	all_data['UA_Family_Hist'] = np.sum(all_data[family_hist_columns] != -1 , axis = 1)
 	employment_info_columns = all_data.columns[all_data.columns.str.startswith('Employment_Info_')]
-	all_data['UA_Employment_Info'] = np.sum(all_data[employment_info_columns] == -1 , axis = 1)
-	for col in cols:
+	all_data['UA_Employment_Info'] = np.sum(all_data[employment_info_columns] != -1 , axis = 1)
+	cols_to_power = list(Set(cols)-Set(med_keyword_columns))
+	
+	for col in cols_to_power:
 		all_data[col+"square"] = np.square(all_data[col])
 	train_new = all_data[all_data['Response']>0].copy()
 	test_new = all_data[all_data['Response']<1].copy()
@@ -205,6 +208,7 @@ if __name__ == "__main__":
 	#train,test = select_features()
 	skf = KFold(len(train),n_folds=3)
 	print "Begin 3 fold cross validation"
+	scores = []
 	for train_index,test_index in skf:
 		train_part = train.iloc[train_index,:]
 		test_part = train.iloc[test_index,:]
@@ -212,8 +216,10 @@ if __name__ == "__main__":
 		X_test = test_part.iloc[:,1:].drop(columns_to_drop,axis=1)
 		y_train = train_part['Response']
 		y_test = test_part['Response']
-		print xgb_model(X_train,y_train,X_test,y_test)
-
+		score = xgb_model(X_train,y_train,X_test,y_test)
+		print score
+		scores.append(score)
+	print np.mean(scores)
 	proceed = raw_input("Train on entire Data? (T/F)")
 	if proceed == 'T':
 		X_train =  train.iloc[:,1:].drop(columns_to_drop,axis=1)
