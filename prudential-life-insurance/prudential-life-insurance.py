@@ -119,7 +119,7 @@ def xgb_model(X_train,y_train,X_test,y_test,save=False):
 		print "Saving output...."
 		# fix to remove floats
 		submission = submission.astype(int)
-		submission.to_csv('submissions/output13.csv',index=False)
+		submission.to_csv('submissions/output14.csv',index=False)
 
 
 def add_features():
@@ -152,7 +152,7 @@ def add_features():
 	print 'Filling Missing values'
 	all_data.fillna(-1, inplace=True)
 
-
+	print "Adding modified features.."
 	all_data['Response'] = all_data['Response'].astype(int)
 	cols = [col for col in train.columns if col != "Response" and col != "Id"]
 	all_data["CountNulls"]=np.sum(all_data[cols] == -1 , axis = 1)
@@ -169,6 +169,10 @@ def add_features():
 	
 	for col in cols_to_power:
 		all_data[col+"square"] = np.square(all_data[col])
+
+	discrete_cols = ['Medical_History_1', 'Medical_History_10', 'Medical_History_15', 'Medical_History_24', 'Medical_History_32']	
+	for col in discrete_cols:
+		all_data[col+"_age"] = all_data[col] * all_data['Ins_Age']
 	train_new = all_data[all_data['Response']>0].copy()
 	test_new = all_data[all_data['Response']<1].copy()
 
