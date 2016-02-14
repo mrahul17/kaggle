@@ -155,6 +155,7 @@ def add_features():
 	print "Adding modified features.."
 	all_data['Response'] = all_data['Response'].astype(int)
 	cols = [col for col in train.columns if col != "Response" and col != "Id"]
+
 	all_data["CountNulls"]=np.sum(all_data[cols] == -1 , axis = 1)
 	
 	insured_info_columns = all_data.columns[all_data.columns.str.startswith('InsuredInfo_')]
@@ -169,10 +170,19 @@ def add_features():
 	
 	for col in cols_to_power:
 		all_data[col+"square"] = np.square(all_data[col])
+	continuous_cols =  ['Employment_Info_1', 'Employment_Info_4', 'Employment_Info_6', 'Insurance_History_5', 'Family_Hist_2', 'Family_Hist_3', 'Family_Hist_4', 'Family_Hist_5']
 
+	
 	discrete_cols = ['Medical_History_1', 'Medical_History_10', 'Medical_History_15', 'Medical_History_24', 'Medical_History_32']	
 	for col in discrete_cols:
 		all_data[col+"_age"] = all_data[col] * all_data['Ins_Age']
+	for col in insured_info_columns:
+		all_data[col+"_age"] = all_data[col] * all_data['Ins_Age']
+
+	#all_data['Medic_Sum'] = all_data[discrete_cols].sum(axis=1)
+	#all_data['Emp_Sum'] = all_data[['Employment_Info_1', 'Employment_Info_4', 'Employment_Info_6']].sum(axis=1)
+
+
 	train_new = all_data[all_data['Response']>0].copy()
 	test_new = all_data[all_data['Response']<1].copy()
 
@@ -210,7 +220,7 @@ if __name__ == "__main__":
 	features = list(Set(train.columns)-Set(columns_to_drop))
 	ceate_feature_map(features)
 	#train,test = select_features()
-	skf = KFold(len(train),n_folds=3)
+	skf = KFold(len(train),n_folds=3,shuffle=True,random_state=2)
 	print "Begin 3 fold cross validation"
 	scores = []
 	for train_index,test_index in skf:
