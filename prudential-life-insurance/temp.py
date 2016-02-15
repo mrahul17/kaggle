@@ -20,29 +20,8 @@ import operator
 # remove comment from the line below if using ipython notebook
 #%matplotlib inline
 
+# credits to @zeroblue
 
-NOMINALS = ['Product_Info_1', 'Product_Info_2_num','Product_Info_2_char','Product_Info_3',
-            'Product_Info_5', 'Product_Info_6', 'Product_Info_7',
-            'Employment_Info_2', 'Employment_Info_3', 'Employment_Info_5',
-            'InsuredInfo_1', 'InsuredInfo_2', 'InsuredInfo_3', 'InsuredInfo_4',
-            'InsuredInfo_5', 'InsuredInfo_6', 'InsuredInfo_7',
-            'Insurance_History_1', 'Insurance_History_2', 'Insurance_History_3',
-            'Insurance_History_4', 'Insurance_History_7', 'Insurance_History_8',
-            'Insurance_History_9', 'Family_Hist_1', 'Medical_History_2',
-            'Medical_History_3', 'Medical_History_4', 'Medical_History_5',
-            'Medical_History_6', 'Medical_History_7', 'Medical_History_8',
-            'Medical_History_9', 'Medical_History_11', 'Medical_History_12',
-            'Medical_History_13', 'Medical_History_14', 'Medical_History_16',
-            'Medical_History_17', 'Medical_History_18', 'Medical_History_19',
-            'Medical_History_20', 'Medical_History_21', 'Medical_History_22',
-            'Medical_History_23', 'Medical_History_25', 'Medical_History_26',
-            'Medical_History_27', 'Medical_History_28', 'Medical_History_29',
-            'Medical_History_30', 'Medical_History_31', 'Medical_History_33',
-            'Medical_History_34', 'Medical_History_35', 'Medical_History_36',
-            'Medical_History_37', 'Medical_History_38', 'Medical_History_39',
-            'Medical_History_40', 'Medical_History_41']
-
-# credits to @zeroblue          
 def ceate_feature_map(features):
     outfile = open('xgb.fmap', 'w')
     i = 0
@@ -77,15 +56,11 @@ def apply_offset(data, bin_offset, sv, scorer=eval_wrapper):
     score = scorer(data[1], data[2])
     return score
 
-
 def xgb_model(X_train,y_train,X_test,y_test,save=False):
 	'''
 		Function to apply the xgb model to the split train dataset to get the score
 	'''
-	if not save:
-		num_rounds = 800
-	else:
-		num_rounds = 1000
+	num_rounds = 800
 	# setup parameters for xgboost
 	params = {}
 	# use softmax multi-class classification
@@ -121,7 +96,7 @@ def xgb_model(X_train,y_train,X_test,y_test,save=False):
 		data[1, data[0].astype(int)==j] = data[0, data[0].astype(int)==j] + offsets[j] 
 	for j in range(num_classes):
 		train_offset = lambda x: -apply_offset(data, x, j)
-		offsets[j] = fmin_powell(train_offset, offsets[j],disp=0)  
+		offsets[j] = fmin_powell(train_offset, offsets[j])  
 
 	# apply offsets to test
 	#return test_preds.shape,test['Response'].values
@@ -144,10 +119,12 @@ def xgb_model(X_train,y_train,X_test,y_test,save=False):
 		print "Saving output...."
 		# fix to remove floats
 		submission = submission.astype(int)
-		submission.to_csv('submissions/output.csv',index=False)
+		submission.to_csv('submissions/output18.csv',index=False)
 
 
 def add_features():
+#	med_imp_list = {'Medical_Keyword_19': 25, 'Medical_Keyword_18': 28, 'Medical_Keyword_12': 353, 'Medical_Keyword_28': 15, 'Medical_Keyword_29': 17, 'Medical_Keyword_20': 33, 'Medical_Keyword_21': 14, 'Medical_Keyword_22': 49, 'Medical_Keyword_23': 8, 'Medical_Keyword_24': 8, 'Medical_Keyword_25': 10, 'Medical_Keyword_26': 8, 'Medical_Keyword_27': 1, 'Medical_Keyword_9': 254, 'Medical_Keyword_8': 90, 'Medical_Keyword_5': 44, 'Medical_Keyword_4': 76, 'Medical_Keyword_7': 5, 'Medical_Keyword_1': 14, 'Medical_Keyword_3': 11, 'Medical_Keyword_2': 15, 'Medical_Keyword_10': 87, 'Medical_Keyword_48': 17, 'Medical_Keyword_42': 2, 'Medical_Keyword_43': 16, 'Medical_Keyword_40': 13, 'Medical_Keyword_41': 31, 'Medical_Keyword_46': 29, 'Medical_Keyword_47': 1, 'Medical_Keyword_45': 13, 'Medical_Keyword_15': 82, 'Medical_Keyword_14': 18, 'Medical_Keyword_17': 242, 'Medical_Keyword_16': 24, 'Medical_Keyword_11': 49, 'Medical_Keyword_13': 33, 'Medical_Keyword_39': 5, 'Medical_Keyword_38': 42, 'Medical_Keyword_37': 18, 'Medical_Keyword_36': 10, 'Medical_Keyword_35': 2, 'Medical_Keyword_34': 25, 'Medical_Keyword_33': 4, 'Medical_Keyword_32': 25, 'Medical_Keyword_31': 24, 'Medical_Keyword_30': 11}
+
 	# count number of zeroes
 	print "Adding Features..."
 	all_data = train.append(test)
@@ -167,7 +144,7 @@ def add_features():
 
 	med_keyword_columns = all_data.columns[all_data.columns.str.startswith('Medical_Keyword_')]
 	all_data['Med_Keywords_Count'] = all_data[med_keyword_columns].sum(axis=1)
-	
+		
 	# inspired by https://www.kaggle.com/mariopasquato/prudential-life-insurance-assessment/linear-model/code
 	all_data['BMI_Prod4'] = all_data['BMI'] * all_data['Product_Info_4']
 	all_data['BMI_Med_Key3'] = all_data['BMI'] * all_data['Medical_Keyword_3']
@@ -178,39 +155,48 @@ def add_features():
 	all_data.fillna(-1, inplace=True)
 
 	print "Adding modified features.."
+	all_data['Male'] = all_data['Family_Hist_2'] != -1
+	all_data['Female'] = all_data['Family_Hist_3'] != -1
+	all_data['Male'].astype(int)
+	all_data['Female'].astype(int)
+
+	# sex and age interaction has no effect !!
+	#all_data['Sex_Age'] = all_data['Male'] * all_data['Ins_Age'] + all_data['Female'] * all_data['Ins_Age']
+	#all_data['Terms'] = all_data['Male'] * all_data['Product_Info_4'] +  all_data['Female'] * all_data['Product_Info_4']
 	all_data['Response'] = all_data['Response'].astype(int)
 	cols = [col for col in train.columns if col != "Response" and col != "Id"]
-
 	all_data["CountNulls"]=np.sum(all_data[cols] == -1 , axis = 1)
 	
 	insured_info_columns = all_data.columns[all_data.columns.str.startswith('InsuredInfo_')]
-	all_data['UA_InsuredInfo'] = np.sum(all_data[insured_info_columns] != -1 , axis = 1)
+	#all_data['UA_InsuredInfo'] = np.sum(all_data[insured_info_columns] != -1 , axis = 1)
+	all_data['InsuredInfo_Sum'] = all_data[insured_info_columns].sum(axis=1)
 	medical_history_columns = all_data.columns[all_data.columns.str.startswith('Medical_History_')]
 	all_data['UA_Medical_History'] = np.sum(all_data[medical_history_columns] != -1 , axis = 1)
-	family_hist_columns = all_data.columns[all_data.columns.str.startswith('Family_Hist_')]
-	all_data['UA_Family_Hist'] = np.sum(all_data[family_hist_columns] != -1 , axis = 1)
+	#family_hist_columns = all_data.columns[all_data.columns.str.startswith('Family_Hist_')]
+	#all_data['UA_Family_Hist'] = np.sum(all_data[family_hist_columns] != -1 , axis = 1)
 	employment_info_columns = all_data.columns[all_data.columns.str.startswith('Employment_Info_')]
 	all_data['UA_Employment_Info'] = np.sum(all_data[employment_info_columns] != -1 , axis = 1)
 	cols_to_power = list(Set(cols)-Set(med_keyword_columns))
-	
+	#for col in med_keyword_columns:
+	#	if col not in med_imp_list:
+#			med_imp_list[col] = 0	
+#	new_data = pd.DataFrame()
+#	new_data[med_keyword_columns] = all_data[med_keyword_columns]
+#	for col in med_keyword_columns:
+#		new_data[col] = new_data[col] * med_imp_list[col]
+
+#	all_data['Med_Sum'] = new_data[med_keyword_columns].sum(axis=1)
+#	df = all_data['Med_Sum']
+#	all_data['Med_Sum'] = (df-df.mean())/(df.max() - df.min())
+
 	for col in cols_to_power:
 		all_data[col+"square"] = np.square(all_data[col])
-	continuous_cols =  ['Employment_Info_1', 'Employment_Info_4', 'Employment_Info_6', 'Insurance_History_5', 'Family_Hist_2', 'Family_Hist_3', 'Family_Hist_4', 'Family_Hist_5']
 
-	
 	discrete_cols = ['Medical_History_1', 'Medical_History_10', 'Medical_History_15', 'Medical_History_24', 'Medical_History_32']	
 	for col in discrete_cols:
 		all_data[col+"_age"] = all_data[col] * all_data['Ins_Age']
-	for col in insured_info_columns:
-		all_data[col+"_age"] = all_data[col] * all_data['Ins_Age']
 
-	#all_data['Medic_Sum'] = all_data[discrete_cols].sum(axis=1)
-	#all_data['Emp_Sum'] = all_data[['Employment_Info_1', 'Employment_Info_4', 'Employment_Info_6']].sum(axis=1)
-	#print "OneHot Encoding.."
-	#all_data = pd.get_dummies(all_data,dummy_na=True,columns=NOMINALS,sparse=True)
-	#print 'Filling Missing values'	
-	#all_data.fillna(-1,inplace=True)
-
+	
 	train_new = all_data[all_data['Response']>0].copy()
 	test_new = all_data[all_data['Response']<1].copy()
 
@@ -246,9 +232,9 @@ if __name__ == "__main__":
 	# COMMENT THE LINE BELOW
 	columns_to_drop = ['Response','Medical_History_10','Medical_History_24']
 	features = list(Set(train.columns)-Set(columns_to_drop))
-	ceate_feature_map(features)
+	#ceate_feature_map(features)
 	#train,test = select_features()
-	skf = KFold(len(train),n_folds=3,shuffle=True,random_state=2)
+	skf = KFold(len(train),n_folds=3,shuffle=True,random_state=1)
 	print "Begin 3 fold cross validation"
 	scores = []
 	for train_index,test_index in skf:
