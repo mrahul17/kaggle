@@ -4,3 +4,6 @@
 *.txt
 *.png
 *.fmap
+*.pdf
+*.sqlite
+ensembler/
