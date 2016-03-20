@@ -83,7 +83,7 @@ def select_features(train,test):
 			if col1 != col2 and train[col1].equals(train[col2]) :
 				cols_to_drop.append(col2)
 				cols.remove(col2) 
-	return cols_to_drop
+	
 
 	# remove highly correlated columns
 	
@@ -97,6 +97,8 @@ def select_features(train,test):
 					cols_to_drop.append(col2)
 					cols.remove(col2) 
 
+	return cols_to_drop
+
 def add_features(train, test):
 	for col in train.columns:
 		if col not in ['ID', 'TARGET']:
@@ -107,18 +109,18 @@ def add_features(train, test):
 
 if __name__ == "__main__":
 	print "Reading Train Data..."
-	#train = pd.read_csv('train.csv')
-	train = pd.read_csv('train_edited1.csv')
+	train = pd.read_csv('train.csv')
+	#train = pd.read_csv('train_edited1.csv')
 	print "Reading Test Data..."
-	#test = pd.read_csv('test.csv')
-	test = pd.read_csv('test_edited1.csv')
+	test = pd.read_csv('test.csv')
+	#test = pd.read_csv('test_edited1.csv')
 	#train,test = add_features()
 
 	
 	#ceate_feature_map(features)
-	#cols_to_drop = select_features(train, test)
-	#train.drop(cols_to_drop, inplace=True, axis=1)
-	#test.drop(cols_to_drop, inplace = True, axis =1)	
+	cols_to_drop = select_features(train, test)
+	train.drop(cols_to_drop, inplace=True, axis=1)
+	test.drop(cols_to_drop, inplace = True, axis =1)	
 	#train,test = add_features(train, test)
 	
 	print "Number of features" + str(len(train.columns))
