@@ -46,9 +46,9 @@ def xgb_model(X_train,y_train,X_test,y_test=None,save=False):
 		Function to apply the xgb model to the split train dataset to get the score
 	'''
 	if not save:
-		num_rounds = 500
-	else:
 		num_rounds = 600
+	else:
+		num_rounds = 700
 	
 	# setup parameters for xgboost
 	params = {}
@@ -124,14 +124,14 @@ def select_features():
 	print "Removing correlated factors"
 	
 	# replace code below, modifying the list over which we are iterating
-	for col1 in cols:
-		for col2 in cols:
-			if col1 != col2:
-				cor = train.x[col1].corr(train.x[col2])
-				if abs(cor) > 0.999 :
-					cols_to_drop.append(col2)
-					cols.remove(col2) 
+	corr_cols = []
+	col_pairs = []
+	for i in range(len(cols)):
+		for j in range(i+1, len(cols)):
+			col_pairs.append((cols[i],cols[j]))
 
+	corr_cols = [col2 for col1,col2 in col_pairs if abs(train.x[col1].corr(train.x[col2]))>0.999]
+	cols_to_drop += corr_cols
 	
 	return cols_to_drop
 
@@ -164,7 +164,7 @@ if __name__ == "__main__":
 	cols_to_drop = select_features()
 	add_features()
 	#cols_to_drop = ['v8','v23','v25','v36','v37','v46','v51','v53','v54','v63','v73','v75','v79','v81','v82','v89','v92','v95','v105','v107','v108','v109','v110','v116','v117','v118','v119','v123','v124','v128']
-	#print cols_to_drop
+	print cols_to_drop
 	train.x.drop(cols_to_drop, inplace=True, axis=1)
 	test.x.drop(cols_to_drop, inplace=True, axis =1)
 	#plot_scatter()
@@ -176,8 +176,8 @@ if __name__ == "__main__":
 	for train_index,test_index in skf:
 		X_train = train.x.iloc[train_index,:]
 		X_test = train.x.iloc[test_index,:]
-		y_train = train.y.iloc[train_index,:]
-		y_test = train.y.iloc[test_index,:]
+		y_train = train.y.iloc[train_index,:]['PredictedProb']
+		y_test = train.y.iloc[test_index,:]['PredictedProb']
 		score = xgb_model(X_train,y_train,X_test,y_test)
 		print score
 		scores.append(score)
@@ -185,11 +185,10 @@ if __name__ == "__main__":
 
 	proceed = raw_input("Train on entire Data? (T/F)")
 	if proceed == 'T':		
-		xgb_model(train.x,train.y,test.x,test.y,True)
+		xgb_model(train.x,train.y['PredictedProb'],test.x,test.y,True)
 
 	#Save scatterplot images
 	#plot_scatter()
 	
-	print "Done!! Exiting Now..."
 	print "Done!! Exiting Now..."
 
